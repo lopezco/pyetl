@@ -1,0 +1,11 @@
+###    Dependencies for UDM_OVERVIEW creation   ###
+###                                             ###
+### To install, run:                            ###
+###      $ pip install -r requirements.txt      ###
+###                                             ###
+###################################################
+
+#Packages
+pandas
+numpy
+tqdm
