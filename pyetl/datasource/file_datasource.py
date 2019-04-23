@@ -90,5 +90,5 @@ class FileDataSource(DataSource):
         # Since all fields are read as text data, numeric fields have to
         # be converted to numeric data
         # TODO: implement data class DataDictionary
-        if self.get_metadata().is_mumeric(var_name):
+        if self.get_metadata().is_numeric_variable(var_name):
             return var.astype(float)

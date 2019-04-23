@@ -302,20 +302,7 @@ class DataSource(ABC):
         :param var_in: numpy.array
         :return: var_out
         """
-        if var_name in self.get_variable_names():
-            self.log('Cannot found the following variable in the metadata catalog: {}'.format(var_name), level='ERROR')
-
-        # This function only applies to date, time and timestamp data
-        if self._md.is_date_variable(var_name):
-            var_out = pd.to_datetime(var_in, errors='coerce', format=self._md.get_datetime_format(var_name))
-        elif self._md.is_time_variable(var_name):
-            var_out = pd.to_timedelta(var_in, errors='coerce')
-        elif self._md.is_timestamp_variable(var_name):
-            var_out = pd.to_datetime(var_in, errors='coerce', unit=self._md.get_datetime_format(var_name))
-        else:
-            var_out = var_in
-
-        return var_out
+        return self._md.format_datetime_data(var_name, var_in)
 
     def read_only_copy(self, metadata, size, data_location=None, location_reader=None):
         """
