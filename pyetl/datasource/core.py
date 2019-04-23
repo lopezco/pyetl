@@ -23,7 +23,7 @@ class DataSource(ABC):
     _shape = (0, 0)             # data source size
     _md = None                  # metadata catalog
     _is_case_sensitive = True   # flag indicating if the data source is case sensitive when handling variable names
-    _iterative_reader = None    # object for iteratively reading data from the data source
+    _location_iterator = None    # object for iteratively reading data from the data source
     _chunk_size = 1e4           # number of rows to read/write at each step
     _logger = None              # logger object
 
@@ -78,19 +78,38 @@ class DataSource(ABC):
         """
         NotImplementedError()
 
-    def _get_reader(self, conn=None):
+    def _crerate_location_iterator(self, conn=None):
         """
         Initialize data source reader
         return: reader
         """
         NotImplementedError()
 
-    def get_data_from_reader(self):
-        """
-        Retrieve data from the data source's reader
-        :return df, updated_reader
-        """
-        NotImplementedError()
+    def has_metadata(self):
+        return self.get_metadata() is not None
+
+    def get_data_iterator(self):
+        # Read data
+        for li in self.get_location_iterator():
+            for df in li:
+                if self.has_metadata():
+                    # Get variable names
+                    var_name = df.columns
+                    if set(self.get_variable_names()) == set(var_name):
+                        self.log('Variable names are not consistent with metadata', level='ERROR')
+
+                    # Loop through columns
+                    for idx, name in enumerate(df.colums):
+                        col = df[name]
+                        # Run technical pre-processing
+                        col = self.technical_preprocessing(col, var_name[idx])
+                        # Transform datetime data and apply datetime formats
+                        col = self.format_datetime_data(var_name[idx], col)
+                        # Replace data in the table
+                        df[name] = col
+
+                self.log('Read {} observations'.format(len(df)))
+                yield df
 
     # methods (Access = public)
     def size(self, dim=None):
@@ -132,46 +151,20 @@ class DataSource(ABC):
         """
         self._logger = logging.getLogger(__name__)
 
-    def has_reader(self):
+    def has_location_iterator(self):
         """
         Indicate if the data source already has an initialized reader
         :return: flag
         """
-        return self._iterative_reader is not None
+        return self._location_iterator is not None
 
-    def init_reader(self, conn=None):
+    def init_location_iterator(self, conn=None):
         """
         Initialize iterative data readers
         :param conn:
         """
-        self.log('Initializing readers')
-        self._iterative_reader = self._get_reader(conn)
-
-    def read_one(self):
-        """
-        Run a single read step
-        :return: (df, elapsedTime)
-        """
-        # Read data
-        for df in self._iterative_reader:
-            if not len(df):
-                # Get variable names
-                var_name = df.columns
-                if set(self.get_variable_names()) == set(var_name):
-                    self.log('Variable names are not consistent with metadata', level='ERROR')
-
-                # Loop through columns
-                for idx, name in enumerate(df.colums):
-                    col = df[name]
-                    # Run technical pre-processing
-                    col = self.technical_preprocessing(col, var_name[idx])
-                    # Transform datetime data and apply datetime formats
-                    col = self.format_datetime_data(var_name[idx], col)
-                    # Replace data in the table
-                    df[name] = col
-
-                self.log('Read {] observations'.format(len(df)))
-            yield df
+        self.log('Initializing iterator')
+        self._location_iterator = self._crerate_location_iterator(conn)
 
     def read_all(self):
         """
@@ -186,12 +179,12 @@ class DataSource(ABC):
 
         try:
             # Initialize the reader(s)
-            if not self.has_reader():
-                self.init_reader(conn)
+            if self.has_location_iterator():
+                self.init_location_iterator(conn)
 
             # Read data
             result_buffer = []
-            for chunk in self.read_one():
+            for chunk in self.get_data_iterator():
                 if len(chunk):
                     result_buffer.append(chunk)
 
@@ -216,7 +209,7 @@ class DataSource(ABC):
         """
         ds = deepcopy(self)
         ds._access_mode = 'read-only'
-        ds._iterative_reader = []
+        ds._location_iterator = []
         ds._md = []
         ds.fetch_metadata()
 
@@ -238,7 +231,7 @@ class DataSource(ABC):
         # Indicates how the data source will be used
         valid_modes = {'read-only', 'append', 'create'}
         access_mode = access_mode.lower().strip()
-        if not access_mode in valid_modes:
+        if access_mode not in valid_modes:
             self.log('Unsupported access mode, should be any of the following: {}'.format(valid_modes), level='ERROR')
         self._access_mode = access_mode
         
@@ -248,11 +241,11 @@ class DataSource(ABC):
         
         # Fetch and set metadata if the data source already exists,
         # i.e. in read-only and append modes only
-        if flag_read_metadata and (self.mode_is_read_only or self.mode_is_append()):
-            self.fetch_metadata(var_name)
+        if flag_read_metadata and (self.mode_is_read_only() or self.mode_is_append()):
+            self.fetch_metadata()
         
         # In append and create modes, there can be only a single output data location
-        if (self.mode_is_append() or self.mode_is_create) and len(self.get_location()) != 1:
+        if (self.mode_is_append() or self.mode_is_create()) and len(self.get_location()) != 1:
             self.log('Only a single location is supported for output operations', level='ERROR')
 
     def get_dictionary(self):
@@ -269,15 +262,15 @@ class DataSource(ABC):
         :param self: 
         :return: dict
         """
-        return self.md.get_variable_names()
+        return self._md.get_variable_names()
     
-    def get_reader(self):
+    def get_location_iterator(self):
         """
         Iterative reader getter
         :param self: 
         :return: iterative_reader
         """
-        return self._iterative_reader
+        return self._location_iterator
     
     def get_chunk_size(self):
         """
@@ -313,37 +306,37 @@ class DataSource(ABC):
             self.log('Cannot found the following variable in the metadata catalog: {}'.format(var_name), level='ERROR')
 
         # This function only applies to date, time and timestamp data
-        if self.md.is_date_variable(var_name):
-            var_out = pd.to_datetime(var_in, errors='coerce', format=self.md.get_datetime_format(var_name))
-        elif self.md.is_time_variable(var_name):
+        if self._md.is_date_variable(var_name):
+            var_out = pd.to_datetime(var_in, errors='coerce', format=self._md.get_datetime_format(var_name))
+        elif self._md.is_time_variable(var_name):
             var_out = pd.to_timedelta(var_in, errors='coerce')
-        elif self.md.is_timestamp_variable(var_name):
-            var_out = pd.to_datetime(var_in, errors='coerce', unit=self.md.get_datetime_format(var_name))
+        elif self._md.is_timestamp_variable(var_name):
+            var_out = pd.to_datetime(var_in, errors='coerce', unit=self._md.get_datetime_format(var_name))
         else:
             var_out = var_in
 
         return var_out
 
-    def read_only_copy(self, metadata, size, data_location=None, data_reader=None):
+    def read_only_copy(self, metadata, size, data_location=None, location_reader=None):
         """
         Get a read-only copy of the current data source with some varying properties
         :param metadata: 
         :param size:
         :param data_location:
-        :param data_reader:
+        :param location_reader:
         :return: ds
         """
         ds = deepcopy(self)
         ds._access_mode = 'read-only'
-        ds._iterative_reader = []
+        ds._location_iterator = []
         ds._md = metadata
         ds._shape = size
 
         # Alter object properties
         if not len(data_location):
             ds._location = data_location
-        if not len(data_reader):
-            ds._iterative_reader = data_reader
+        if location_reader is not None:
+            ds._location_iterator = location_reader
 
     # Access mode checks
     def mode_is_read_only(self):

@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from pyetl.datasource.core import DataSource, chunker
+from pyetl.datasource.core import DataSource
 from pyetl.datalocation import FilesystemLocation
 import functools
 from pyetl.utils.rowcount import rowcount
@@ -31,7 +31,7 @@ class FileDataSource(DataSource):
         self._chunk_size = chunksize
         self._parameters = kwargs
         self.get_metadata()
-        self.init_reader()
+        self.init_location_iterator()
         self._shape = self.compute_size()
 
     def num_data_locations(self):
@@ -67,17 +67,18 @@ class FileDataSource(DataSource):
             num_rows = rowcount(data_file) - (1 + self._parameters.get('header', 0) * len(data_file))
         else:
             num_rows = -1
-        
-        return num_rows, len(self.get_metadata())
 
-    def _get_reader(self, conn=None):
+        metadata = self.get_metadata()
+        return num_rows, -1 if metadata is None else len(metadata)
+
+    def _crerate_location_iterator(self, conn=None):
         """INITREADERINTERN Initialize data source reader"""
         # Create a datastore selfect and set it propertoes
         read_function = functools.partial(pd.read_csv, iterator=True, chunksize=self._chunk_size, **self._parameters)
 
         for file in self.get_location():
             chunks_iterator = read_function(file)
-            return chunks_iterator
+            yield chunks_iterator
 
     def fetch_metadata(self):
         """FETCHMETADATAINTERN Specialized def for fetching metadata"""
