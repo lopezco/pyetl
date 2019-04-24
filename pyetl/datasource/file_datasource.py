@@ -105,7 +105,6 @@ class FileDataSource(DataSource):
 
     def fetch_metadata(self):
         """FETCHMETADATAINTERN Specialized def for fetching metadata"""
-        # TODO: implement data class DataDictionary
         self._md = self.get_dictionary().read_metadata()
     
     def technical_preprocessing(self, var, var_name):
