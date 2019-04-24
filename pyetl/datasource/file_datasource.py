@@ -1,9 +1,12 @@
 import pandas as pd
+import numpy as np
 import os
 from pyetl.datasource.core import DataSource
 from pyetl.datalocation import FilesystemLocation
 import functools
 from pyetl.utils.rowcount import rowcount
+from multiprocessing.dummy import Pool as ThreadPool
+from functools import partial
 
 
 class FileDataSource(DataSource):
@@ -54,9 +57,29 @@ class FileDataSource(DataSource):
             name = [tuple(os.path.basename(filename).split('.')) for filename in self.get_location()]
         return name
 
-    def write(self, tbl):
-        # TODO: WRITE Write input table to data source
-        NotImplementedError()
+    def write(self, data, num_workers=1, **kwargs):
+        # Verify input
+        locations = self.get_location()
+        if isinstance(data, pd.DataFrame):
+            # Split data in as many chunks as locations
+            n = len(data) // len(locations)
+            data = [df for _, df in data.groupby(np.arange(len(data)) // n)]
+        else:
+            # Verify that all elements in data are pandas.DataFrame objects
+            assert len(locations) == len(data), 'There should be as many input tables as locations'
+            for d in data:
+                assert isinstance(d, pd.DataFrame), 'Wrong input type'
+
+        if (len(data) > 1) and (num_workers > 1):
+            # Run in separated threads
+            def write_in_location(data_plus_location, **kwargs):
+                data_plus_location[0].to_csv(data_plus_location[1], **kwargs)
+
+            pool = ThreadPool(num_workers)
+            _ = pool.map(partial(write_in_location, **kwargs), zip(data, locations))
+        else:
+            for idx, l in enumerate(locations):
+                data[idx].to_csv(l, **kwargs)
     
     # methods (Access = protected)
     def compute_size(self):
