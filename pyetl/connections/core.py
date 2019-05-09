@@ -1,37 +1,37 @@
-import getpass
 import logging
 from copy import deepcopy
 import pandas as pd
+from pyetl.credentials.core import Credentials
 
 logger = logging.getLogger(__name__)
 
 
 class Connection(object):
-    _username = None
-    _password = None
+    _credentials = None
     _conn_params = {'host': 'localhost', 'port': 5433, 'database': 'db'}
     _backend_connection = None
 
-    def __init__(self, credentials=None, store_credentials=False, conn_params=None):
-        password, username = None,None if credentials is None else credentials.get_login()
-        store_credentials = (password is not None or username is not None) or store_credentials
-        if store_credentials:
-            if username is None:
-                print("Username: ")
-                self._username = getpass._raw_input()
-            else:
-                self._username = username
-
-            if password is None:
-                self._password = getpass.getpass()
-            else:
-                self._password = password
+    def __init__(self, credentials=None, conn_params=None):
+        if credentials is None:
+            # Ask for login
+            cred = Credentials()
+            cred.set_login()
+        elif isinstance(credentials, Credentials):
+            # Store as it is
+            cred = credentials
+        elif len(credentials) <= 2:
+            # Pass as arguments
+            cred = Credentials()
+            cred.set_login(*credentials)
+        else:
+            raise ValueError('Non-supported type for credentials')
+        self._credentials = cred
 
         self._conn_params = conn_params or self._conn_params
 
     def _get_conn_parameters(self):
         tmp = deepcopy(self._conn_params)
-        tmp.update({'user': self.username, 'password': self.password})
+        tmp.update(self._credentials)
         return tmp
 
     def open(self):
@@ -46,21 +46,6 @@ class Connection(object):
         :return: success
         """
         raise NotImplementedError()
-
-    @property
-    def password(self):
-        if self._password is None:
-            return getpass.getpass()
-        else:
-            return self._password
-
-    @property
-    def username(self):
-        if self._username is None:
-            print("Username: ")
-            return getpass._raw_input()
-        else:
-            return self._username
 
     def test_connection(self):
         """

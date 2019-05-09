@@ -14,23 +14,12 @@ class VerticaConnection(DbConnection):
     """
     Example to create a new class:
     ```python
-    from pydatabase.vertica import VerticaClient
-    import logging
+    from pyetl.connections import VerticaConnection
 
-    logger = logging.getLogger(__name__)
-
-
-    class MyVerticaClient(VerticaClient):
-
-        _conn_params = {
-            'host': 'myhost1.com',
-            'port': 5433, 'database': 'mydatabase', 'connection_load_balance': True,
-            'backup_server_node': ['myhost2:5433', 'myhost3:5433']}
-
-
-    if __name__ == '__main__':
-        vc = MyVerticaClient(store_credentials=True)
-        vc.fetch("SELECT * FROM MYSCHEMA.MYTABLE LIMIT 10")
+    conn = VerticaConnection(conn_params={'host': 'myhost1.com',
+                                          'port': 5433, 'database': 'mydatabase', 'connection_load_balance': True,
+                                          'backup_server_node': ['myhost2:5433', 'myhost3:5433']})
+    conn.fetch("SELECT * FROM MYSCHEMA.MYTABLE LIMIT 10")
     ```
     """
     _backend_connection = None
