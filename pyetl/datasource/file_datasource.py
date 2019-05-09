@@ -94,7 +94,7 @@ class FileDataSource(DataSource):
         metadata = self.get_metadata()
         return num_rows, -1 if metadata is None else len(metadata)
 
-    def _crerate_location_iterator(self, conn=None):
+    def _create_location_iterator(self, conn=None):
         """INITREADERINTERN Initialize data source reader"""
         # Create a datastore selfect and set it propertoes
         read_function = functools.partial(pd.read_csv, iterator=True, chunksize=self._chunk_size, **self._parameters)

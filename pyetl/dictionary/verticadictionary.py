@@ -1,5 +1,5 @@
 from pyetl.dictionary.core import DatabaseDictionary
-from pyetl.core.metadatacatalog import MetadataCatalog
+from pyetl.dictionary.metadatacatalog import MetadataCatalog
 import numpy as np
 
 

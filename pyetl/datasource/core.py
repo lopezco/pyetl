@@ -1,17 +1,18 @@
-from abc import ABC
 import logging
-from pyetl.core import RequiresConnection
+from pyetl.connections.core import Connection
 import time
 import pandas as pd
 import numpy as np
 from copy import deepcopy
+
+logger = logging.getLogger(__name__)
 
 
 def chunker(seq, size):
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
 
-class DataSource(ABC):
+class DataSource(object):
     """
     DATASOURCE Abstract data source representation
     """
@@ -25,7 +26,47 @@ class DataSource(ABC):
     _is_case_sensitive = True   # flag indicating if the data source is case sensitive when handling variable names
     _location_iterator = None    # object for iteratively reading data from the data source
     _chunk_size = 1e4           # number of rows to read/write at each step
-    _logger = None              # logger object
+
+    def __init__(self, access_mode, is_case_sensitive, location, dictionary, var_name, flag_read_metadata=True,
+                 **kwargs):
+        """
+        Construct a generic data source
+        :param access_mode:
+        :param is_case_sensitive:
+        :param location:
+        :param dictionary:
+        :param var_name:
+        :param flag_read_metadata:
+        """
+        self._location = location
+        # Set type, should be 'read-only' or 'read-write'
+        # Indicates how the data source will be used
+        valid_modes = {'read-only', 'append', 'create'}
+        access_mode = access_mode.lower().strip()
+        if access_mode not in valid_modes:
+            msg = 'Unsupported access mode, should be any of the following: {}'.format(valid_modes)
+            logger.error(msg)
+            raise msg
+        self._access_mode = access_mode
+
+        # Set other properties
+        self._dictionary = dictionary
+        self._is_case_sensitive = is_case_sensitive
+
+        # Fetch and set metadata if the data source already exists,
+        # i.e. in read-only and append modes only
+        if flag_read_metadata and (self.mode_is_read_only() or self.mode_is_append()):
+            self.fetch_metadata()
+
+        # In append and create modes, there can be only a single output data location
+        if (self.mode_is_append() or self.mode_is_create()) and len(self.get_location()) != 1:
+            msg = 'Only a single location is supported for output operations'
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if self.requires_connection():
+            # Init connection
+            super(DataSource, self).__init__(**kwargs)
 
     # methods (Abstract, Access = public)
     def exists(self):
@@ -42,7 +83,7 @@ class DataSource(ABC):
         """
         NotImplementedError()
 
-    def write(self, df, conn):
+    def write(self, df):
         """
         Write input table to data source
         :return numRowsInserted
@@ -78,7 +119,7 @@ class DataSource(ABC):
         """
         NotImplementedError()
 
-    def _crerate_location_iterator(self, conn=None):
+    def _create_location_iterator(self):
         """
         Initialize data source reader
         return: reader
@@ -96,7 +137,9 @@ class DataSource(ABC):
                     # Get variable names
                     var_name = df.columns
                     if set(self.get_variable_names()) == set(var_name):
-                        self.log('Variable names are not consistent with metadata', level='ERROR')
+                        msg = 'Variable names are not consistent with metadata'
+                        logger.error(msg)
+                        raise ValueError(msg)
 
                     # Loop through columns
                     for idx, name in enumerate(df.colums):
@@ -108,7 +151,7 @@ class DataSource(ABC):
                         # Replace data in the table
                         df[name] = col
 
-                self.log('Read {} observations'.format(len(df)))
+                logger.info('Read {} observations'.format(len(df)))
                 yield df
 
     # methods (Access = public)
@@ -143,13 +186,7 @@ class DataSource(ABC):
         """
         :return: flag indicating if the data source requires a connection
         """
-        return isinstance(self, RequiresConnection)
-
-    def init_logger(self):
-        """
-        Set the logger object
-        """
-        self._logger = logging.getLogger(__name__)
+        return isinstance(self, Connection)
 
     def has_location_iterator(self):
         """
@@ -158,13 +195,12 @@ class DataSource(ABC):
         """
         return self._location_iterator is not None
 
-    def init_location_iterator(self, conn=None):
+    def init_location_iterator(self):
         """
         Initialize iterative data readers
-        :param conn:
         """
-        self.log('Initializing iterator')
-        self._location_iterator = self._crerate_location_iterator(conn)
+        logger.info('Initializing iterator')
+        self._location_iterator = self._create_location_iterator()
 
     def read_all(self):
         """
@@ -173,32 +209,23 @@ class DataSource(ABC):
         """
         timer = time.time()
 
-        # Connect to the data source if necessary
-        requires_connection = self.requires_connection()
-        conn = self.connect() if requires_connection else None
+        # Initialize the reader(s)
+        if self.has_location_iterator():
+            self.init_location_iterator()
 
-        try:
-            # Initialize the reader(s)
-            if self.has_location_iterator():
-                self.init_location_iterator(conn)
+        # Read data
+        result_buffer = []
+        for chunk in self.get_data_iterator():
+            if len(chunk):
+                result_buffer.append(chunk)
 
-            # Read data
-            result_buffer = []
-            for chunk in self.get_data_iterator():
-                if len(chunk):
-                    result_buffer.append(chunk)
-
-            if requires_connection:
-                conn.close()
-        except Exception as e:
-            if requires_connection:
-                conn.close()
-            raise e
         df = pd.concat(result_buffer, axis=0)
 
         # Check size
         if len(df) != self.size(0):
-            self.log('Size mismatch: read {} rows but expected {}'.format(len(df), self.size(0)), level='ERROR')
+            msg = 'Size mismatch: read {} rows but expected {}'.format(len(df), self.size(0))
+            logger.error(msg)
+            raise ValueError(msg)
 
         elapsed_time = time.time() - timer
         return df, elapsed_time
@@ -213,41 +240,7 @@ class DataSource(ABC):
         ds._md = []
         ds.fetch_metadata()
 
-    # methods (Access = protected)  
-    def __init__(self, access_mode, is_case_sensitive, location, dictionary, var_name, flag_read_metadata=True):
-        """
-        Construct a generic data source
-        :param access_mode: 
-        :param is_case_sensitive: 
-        :param location: 
-        :param dictionary: 
-        :param var_name: 
-        :param flag_read_metadata:
-        """                        
-        # Set the logger object
-        self.init_logger()
-        self._location = location
-        # Set type, should be 'read-only' or 'read-write'
-        # Indicates how the data source will be used
-        valid_modes = {'read-only', 'append', 'create'}
-        access_mode = access_mode.lower().strip()
-        if access_mode not in valid_modes:
-            self.log('Unsupported access mode, should be any of the following: {}'.format(valid_modes), level='ERROR')
-        self._access_mode = access_mode
-        
-        # Set other properties
-        self._dictionary = dictionary
-        self._is_case_sensitive = is_case_sensitive
-        
-        # Fetch and set metadata if the data source already exists,
-        # i.e. in read-only and append modes only
-        if flag_read_metadata and (self.mode_is_read_only() or self.mode_is_append()):
-            self.fetch_metadata()
-        
-        # In append and create modes, there can be only a single output data location
-        if (self.mode_is_append() or self.mode_is_create()) and len(self.get_location()) != 1:
-            self.log('Only a single location is supported for output operations', level='ERROR')
-
+    # methods (Access = protected)
     def get_dictionary(self):
         """
         Dictionary getter
@@ -279,20 +272,6 @@ class DataSource(ABC):
         :return: dict
         """
         return self._chunk_size
-
-    def log(self, msg, level='INFO'):
-        """
-        Write input message to the log through the logger object
-        :param msg: 
-        :param level:  
-        """
-        level = level.upper().strip()
-        # Write log data to the logger
-        msg = "[{cls} '{name}': ] {msg}".format(cls=self.__class__.__name__, name=self.get_name(), msg=msg)
-        self._logger.log(getattr(logging, level), msg)
-        # Throw an error if necessary
-        if level == 'ERROR':
-            raise RuntimeError(msg)
         
     def format_datetime_data(self, var_name, var_in):
         """
@@ -353,4 +332,6 @@ class DataSource(ABC):
         var_name = np.sort(var_name)
         # Make sure variable names are unique
         if len(np.unique(var_name)) != len(var_name):
-            self.log('Variable names are not unique', level='ERROR')
+            msg = 'Variable names are not unique'
+            logger.error(msg)
+            raise ValueError(msg)

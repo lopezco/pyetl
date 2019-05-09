@@ -1,8 +1,7 @@
 import pandas as pd
-from abc import ABC
 
 
-class DataLocation(ABC):
+class DataLocation(object):
     """DATALOCATION Abstract data location, specifies where data is stored"""
     
     # properties (Access = protected)
