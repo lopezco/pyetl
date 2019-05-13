@@ -16,6 +16,9 @@ class DataLocation(object):
         # GETLOCATION Location getter
         return self._location
 
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, self.__str__())
+
     def __str__(self):
         return '{}'.format(self.get_location())
 
@@ -26,6 +29,16 @@ class DataLocation(object):
     def __init__(self, location):
         # DATALOCATION Construct an instance of this class
         self._location = self._get_list_from_input(location)
+
+    def __len__(self):
+        return self.size()
+
+    def __getitem__(self, item):
+        return self._location[item]
+
+    def __iter__(self):
+        for x in self._location:
+            yield x
 
     @staticmethod
     def _get_list_from_input(input):

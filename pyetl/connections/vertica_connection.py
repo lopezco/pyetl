@@ -193,3 +193,7 @@ class VerticaConnection(DbConnection):
                 self.execute('DROP TABLE {}'.format(t))
             except Exception as e:
                 logger.error('Could not drop table {}: {}'.format(t, e))
+
+    def row_count(self, tbl_name, where_clause=None):
+        query = 'SELECT COUNT(*) AS ROW_COUNT FROM {} WHERE {}'.format(tbl_name, where_clause)
+        return sum(self.fetch(query)['ROW_COUNT'].values)

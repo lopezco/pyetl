@@ -1,4 +1,5 @@
 from pyetl.connections.core import Connection, DbConnection
+from pyetl.datalocation import DatabaseQueryLocation
 import time
 import pandas as pd
 import numpy as np
@@ -18,16 +19,16 @@ class DataSource(object):
     """
     DATASOURCE Abstract data source representation
     """
-    
+
     # properties (Access = private)
     _access_mode = 'read-only'  # data source access mode: read-only, append or create
-    _location = None            # data location
-    _dictionary = None          # data dictionary
-    _shape = (0, 0)             # data source size
-    _md = None                  # metadata catalog
-    _is_case_sensitive = True   # flag indicating if the data source is case sensitive when handling variable names
-    _location_iterator = None    # object for iteratively reading data from the data source
-    _chunk_size = 1e4           # number of rows to read/write at each step
+    _location = None  # data location
+    _dictionary = None  # data dictionary
+    _shape = (0, 0)  # data source size
+    _md = None  # metadata catalog
+    _is_case_sensitive = True  # flag indicating if the data source is case sensitive when handling variable names
+    _location_iterator = None  # object for iteratively reading data from the data source
+    _chunk_size = 1e4  # number of rows to read/write at each step
 
     def __init__(self, access_mode, is_case_sensitive, location, dictionary, var_name, flag_read_metadata=True,
                  **kwargs):
@@ -70,63 +71,64 @@ class DataSource(object):
             # Init connection
             super(DataSource, self).__init__(**kwargs)
 
-    # methods (Abstract, Access = public)
+    # # methods (Abstract, Access = public)
     def exists(self):
         """
         Check if the data source exists
         :return flag
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
     def get_name(self, idx=None):
         """
         Return the name of the idx-th data location
         :return name
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
     def write(self, df):
         """
         Write input table to data source
         :return numRowsInserted
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
-    # def split(self, numSplits, var_nameSplit):
-    #     """
-    #     Split the data source in children data sources
-    #     :return dsList
-    #     """
-    #     NotImplementedError()
+    def split(self, numSplits, var_nameSplit):
+        """
+        Split the data source in children data sources
+        :return dsList
+        """
+        # TODO: Implement
+        raise NotImplementedError()
 
-    # methods (Abstract, Access = protected)
+    # # methods (Abstract, Access = protected)
     def compute_size(self):
         """
         Get data source size
         :return size
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
     def fetch_metadata(self):
         """
         Specialized function for fetching metadata
         :return md
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
-    def technical_preprocessing(self, var, var_name):
+    def technical_preprocessing(self, var, var_name=None):
         """
         Data source specific pre-processing
         :return var
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
     def _create_location_iterator(self):
         """
         Initialize data source reader
         return: reader
         """
-        NotImplementedError()
+        raise NotImplementedError()
 
     def has_metadata(self):
         return self.get_metadata() is not None
@@ -156,7 +158,7 @@ class DataSource(object):
                 logger.info('Read {} observations'.format(len(df)))
                 yield df
 
-    # methods (Access = public)
+    # # methods (Access = public)
     def size(self, dim=None):
         """
         :param dim:
@@ -169,7 +171,7 @@ class DataSource(object):
         Location getter
         :return: location
         """
-        return self._location.get_location()
+        return self._location
 
     def get_metadata(self):
         """
@@ -242,7 +244,7 @@ class DataSource(object):
         ds._md = []
         ds.fetch_metadata()
 
-    # methods (Access = protected)
+    # # methods (Access = protected)
     def get_dictionary(self):
         """
         Dictionary getter
@@ -250,7 +252,7 @@ class DataSource(object):
         :return: dict
         """
         return self._dictionary
-    
+
     def get_variable_names(self):
         """
         Variable names getter
@@ -258,7 +260,7 @@ class DataSource(object):
         :return: dict
         """
         return self._md.get_variable_names()
-    
+
     def get_location_iterator(self):
         """
         Iterative reader getter
@@ -266,7 +268,7 @@ class DataSource(object):
         :return: iterative_reader
         """
         return self._location_iterator
-    
+
     def get_chunk_size(self):
         """
         Chunk size getter
@@ -274,7 +276,7 @@ class DataSource(object):
         :return: dict
         """
         return self._chunk_size
-        
+
     def format_datetime_data(self, var_name, var_in):
         """
         Convert datetime data to datetime objects using the appropriate formats. By default, we use information
@@ -316,7 +318,7 @@ class DataSource(object):
     def mode_is_create(self):
         return self._access_mode == 'create'
 
-    # methods (Access = private)
+    # # methods (Access = private)
     def process_variable_names(self, var_name):
         """
         Process variable names: reshape them in column, sort them, use upper characters only if the data
@@ -340,5 +342,173 @@ class DataSource(object):
 
 
 class DatabaseDataSource(DataSource, DbConnection):
-    # TODO: Implement
-    pass
+    # DATABASEDATASOURCE Summary of this class goes here
+    #    Detailed explanation goes here
+
+    # methods (Abstract, Access = public)
+    def sql_date_formatter(self, date_format=None):
+        """
+         Anonymous function for formatting dates in SQL queries
+        :param date_format:
+        :return: function
+        """
+        raise NotImplementedError()
+
+    def create_table(self, metadata):
+        """
+        Generate the CREATE TABLE statement
+        :param metadata:
+        :return: create_tbl_stmt
+        """
+        raise NotImplementedError()
+
+    def write(self, tbl):
+        """
+        Write input data to data source through the optional connection
+        :return: num_rows_inserted
+        """
+        raise NotImplementedError()
+
+    def split(self, num_splits, var_name_split):
+        """
+        Split the data source in multiples child data sources
+        :param num_splits:
+        :param var_name_split:
+        :return: subds
+        """
+        raise NotImplementedError()
+
+    # methods (Access = public)
+    def __init__(self, access_mode, location, dictionary, metadata, conn_params=None, credentials=None, **kwargs):
+        """
+        Construct a database data source object
+        The input location might be either a collection of tables or of queries.
+        Queries are expected to start with a SELECT statement.
+
+        :return: self
+        """
+        location, variable_names = DatabaseDataSource.process_location(location)
+
+        # Call super constructor but do not read metadata immediately
+        # This will be done later on by this constructor
+        super(DatabaseDataSource, self).__init__(credentials=credentials, conn_params=conn_params,
+                                                 access_mode=access_mode, is_case_sensitive=False,
+                                                 location=location, dictionary=dictionary, var_name=variable_names,
+                                                 flag_read_metadata=False, **kwargs)
+        # Do some checks
+        # The input location might a collection of queries only in read-only mode
+        if isinstance(self._location, DatabaseQueryLocation) and not self.mode_is_read_only():
+            raise ValueError('Query inputs are only supported in read-only mode')
+
+        if self.mode_is_read_only() or self.mode_is_append():
+            # 'read-only' or 'append' mode
+            self.check_table_existence()
+            self.fetch_metadata(variable_names)
+        else:
+            # 'create' mode
+            # Check number of inputs: metadata are expected here
+            # Connect to the database
+            tbl_name = self._location.get_table_name()
+
+            # Drop output tables if they already exist
+            is_existing_tbl = self.get_dictionary().table_exist(tbl_name)
+            if any(is_existing_tbl):
+                logger.info('Following table(s) already exist and will now be dropped: {}'.format(
+                    tbl_name[is_existing_tbl]))
+                self.drop_tables(tbl_name[is_existing_tbl])
+
+            # Create the tables and read metadata from the database
+            self.create_table(metadata)
+            self.fetch_metadata(variable_names)
+
+    def exists(self):
+        """
+        Check data source existence
+        :return: flag
+        """
+        return all(self.check_table_existence())
+
+    def get_name(self, idx=None):
+        """
+        Return the name of the idx-th data location
+        :return: name
+        """
+        name = self.get_location().get_table_name()
+        return name if idx is None else name[idx]
+
+    def get_uniques(self, var_name=None, list_missing_values_in_sql_format=None):
+        """
+        Get unique values for the input given variable along with the associated row count and the number of NULL
+        values of this variable
+
+        :param var_name:
+        :param list_missing_values_in_sql_format:
+        :return: uniques, row_count, num_missing
+        """
+        num_missing = 0
+        # The values contained in the treatAsMissing input have to be
+        # added to the SQL query as a list of values the variable should
+        # not take
+        is_missing_stmt = '{} IS NULL'.format(var_name)
+        is_not_missing_stmt = '{} IS NOT NULL'.format(var_name)
+
+        if list_missing_values_in_sql_format is not None:
+            is_missing_stmt += ' OR {v} IN {miss}'.format(v=var_name, miss=list_missing_values_in_sql_format)
+            is_not_missing_stmt += ' AND {v} NOT IN {miss}'.format(v=var_name, miss=list_missing_values_in_sql_format)
+
+        # Set database preferenecs and connect to the database
+        tbl_name = self.get_location().get_table_name()
+        uniques = pd.DataFrame()
+        for idx in range(len(tbl_name)):
+            # Get uniques
+            query_uniques = """
+            SELECT DISTINCT({var}) AS UNIQUE_VALUES, COUNT(*) AS ROW_COUNT 
+            FROM {tbl} 
+            WHERE {notmiss} 
+            GROUP BY {var}""".format(var=var_name, notmiss=is_not_missing_stmt, tbl=tbl_name[idx])
+
+            logger.debug('Fetch uniques for variable {}: {}'.format(var_name, query_uniques))
+            if idx == 0:
+                uniques = self.fetch(query_uniques)
+            else:
+                uniques = (uniques
+                           .join(self.fetch(query_uniques), how='outer', on='UNIQUE_VALUES', lsuffix='_1', rsuffix='_2')
+                           .fill(0)
+                           .assign(ROW_COUNT=lambda x: x['ROW_COUNT_1'] + x['ROW_COUNT_2'])
+                           .drop(['ROW_COUNT_1', 'ROW_COUNT_2'], axis=1))
+            # Compute the number of missing values
+            num_missing += self.row_count(tbl_name[idx], is_missing_stmt)
+
+        row_count, uniques = uniques['ROW_COUNT'], uniques['UNIQUE_VALUES']
+        # Apply some preprocessing
+        uniques = self.technical_preprocessing(uniques)
+        uniques = self.format_datetime_data(var_name, uniques)
+        # Check results: the sum of all row counts and the number of
+        # NULL values is expected to be equal to the data source size
+        if self.size(0) != (sum(row_count) + num_missing):
+            raise ValueError('Computed row counts do not add up to the data source size')
+        return uniques, row_count, num_missing
+
+    # methods (Access = protected)
+    def compute_size(self):
+        """
+        Compute the size of the data source
+        :return: sz
+        """
+        # If the metadata catalog is empty, throw an error
+        md = self.get_metadata()
+        if not len(md):
+            raise ValueError('Metadata catalog is empty')
+
+        # Get row count for the data source's tables
+        tbl_name = self.get_location().get_table_name()
+        where_clause = self.get_location().get_where_clause()
+        row_count = self.row_count(tbl_name, where_clause=where_clause)
+
+        # The size is determined:
+        # - for rows, as the sum of the tables' row count
+        # - for columns, as the row count of the metadata catalog
+        sz = sum(row_count), md.size(0)
+        return sz
+
+# TODO: finish implementation

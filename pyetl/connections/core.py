@@ -151,3 +151,6 @@ class DbConnection(Connection):
 
     def drop_tables(self, tables):
         raise NotImplementedError()
+
+    def row_count(self, tbl_name, where_clause=None):
+        raise NotImplementedError()

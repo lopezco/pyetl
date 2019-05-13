@@ -29,7 +29,7 @@ class DatabaseQueryLocation(DatabaseLocation):
         Retrieve table name from the data location queries
         :return: tbl_name
         """
-        location = self.__repr__()
+        location = self.to_string()
         tbl_name = []
         # The table name is between the FROM statement and the next whitespace
         for idx in range(len(location)):
