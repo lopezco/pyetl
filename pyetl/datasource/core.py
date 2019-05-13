@@ -1,9 +1,11 @@
-import logging
-from pyetl.connections.core import Connection
+from pyetl.connections.core import Connection, DbConnection
 import time
 import pandas as pd
 import numpy as np
 from copy import deepcopy
+from multiprocessing.dummy import Pool as ThreadPool
+from functools import partial
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -335,3 +337,8 @@ class DataSource(object):
             msg = 'Variable names are not unique'
             logger.error(msg)
             raise ValueError(msg)
+
+
+class DatabaseDataSource(DataSource, DbConnection):
+    # TODO: Implement
+    pass

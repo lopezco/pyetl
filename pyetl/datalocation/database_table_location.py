@@ -7,7 +7,7 @@ class DatabaseTableLocation (DatabaseLocation):
     # methods (Access = public)
     def __init__(self, location):
         # DATABASETABLE Construct a database table collection object
-        location = [l.upper().strip() for l in self._get_list_of_strings(location)]
+        location = [l.upper().strip() for l in self._get_list_from_input(location)]
         super(DatabaseTableLocation, self).__init__(location)
 
     def get_table_name(self):
@@ -24,7 +24,7 @@ class DatabaseTableLocation (DatabaseLocation):
         :param where_clause:
         :return: databaseQuery
         """
-        where_clause = self._get_list_of_strings(where_clause)
+        where_clause = self._get_list_from_input(where_clause)
         if self.size() == 1 and len(where_clause) > 1:
             tbl_name = [self.get_table_name() for _ in range(len(where_clause))]
         elif self.size() == len(where_clause):

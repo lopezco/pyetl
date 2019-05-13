@@ -8,7 +8,7 @@ class DatabaseQueryLocation(DatabaseLocation):
     # methods (Access = public)
     def __init__(self, query):
         # Constructs a database query object and validates the input query
-        query = [q.strip() for q in self._get_list_of_strings(query)]
+        query = [q.strip() for q in self._get_list_from_input(query)]
         for q in query:
             # Make sure the input is a valid query: it is expected to start
             # with a 'SELECT' statement and to contain a 'FROM' statement
@@ -102,7 +102,7 @@ class DatabaseQueryLocation(DatabaseLocation):
         where_clause_existing = self.get_where_clause()
 
         # Process the input to arrange it as column-oriented cell array
-        where_clause_input = [w.strip() for w in self._get_list_of_strings(where_clause_input)]
+        where_clause_input = [w.strip() for w in self._get_list_from_input(where_clause_input)]
         if len(where_clause_existing) != len(where_clause_input):
             raise ValueError('Size mismatch in WHERE clauses')
 

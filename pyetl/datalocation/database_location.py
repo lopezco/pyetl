@@ -7,7 +7,7 @@ class DatabaseLocation(DataLocation):
     # methods (Access = protected)
     def __init__(self, location):
         # DATABASELOCATION Construct an instance of this class
-        location = self._get_list_of_strings(location)
+        location = self._get_list_from_input(location)
         super(DatabaseLocation, self).__init__([l.upper() for l in location])
         self.check_table_name_syntax()
 

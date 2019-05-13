@@ -25,8 +25,8 @@ class DataLocation(object):
     # methods (Access = protected)
     def __init__(self, location):
         # DATALOCATION Construct an instance of this class
-        self._location = self._get_list_of_strings(location)
+        self._location = self._get_list_from_input(location)
 
     @staticmethod
-    def _get_list_of_strings(location):
-        return location if pd.api.types.is_list_like(location) else [location]
+    def _get_list_from_input(input):
+        return input if pd.api.types.is_list_like(input) else [input]
