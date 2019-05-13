@@ -1,4 +1,2 @@
 from .file_location import FilesystemLocation
-from .database_location import DatabaseLocation
-from .database_table_location import DatabaseTableLocation
-from .database_query_location import DatabaseQueryLocation
+from .database_location import DatabaseLocation, DatabaseTableLocation, DatabaseQueryLocation
