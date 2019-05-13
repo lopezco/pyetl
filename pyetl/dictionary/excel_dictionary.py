@@ -1,7 +1,6 @@
 import pandas as pd
 import os
-from pyetl.dictionary.core import DataDictionary
-from pyetl.dictionary.metadatacatalog import MetadataCatalog
+from pyetl.dictionary.core import DataDictionary, MetadataCatalog
 
 
 class ExcelDictionary(DataDictionary):

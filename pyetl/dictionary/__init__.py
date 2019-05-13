@@ -1,2 +1,2 @@
-from .exceldictionary import ExcelDictionary
-from .verticadictionary import VerticaDictionary
+from .excel_dictionary import ExcelDictionary
+from .vertica_dictionary import VerticaDictionary

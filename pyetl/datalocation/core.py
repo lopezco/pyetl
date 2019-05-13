@@ -17,13 +17,16 @@ class DataLocation(object):
         return self._location
 
     def __str__(self):
-        return '{}'.format(self._location)
+        return '{}'.format(self.get_location())
+
+    def to_string(self):
+        return ['{}'.format(l) for l in self.get_location()]
 
     # methods (Access = protected)
     def __init__(self, location):
         # DATALOCATION Construct an instance of this class
-        self._location = self._format_location_input(location)
+        self._location = self._get_list_of_strings(location)
 
     @staticmethod
-    def _format_location_input(location):
+    def _get_list_of_strings(location):
         return location if pd.api.types.is_list_like(location) else [location]

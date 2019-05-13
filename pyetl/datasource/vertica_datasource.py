@@ -56,10 +56,13 @@ class VerticaDataSource(DataSource, VerticaConnection):
         """
         super(VerticaDataSource, self).__init__(*args, **kwargs)
 
-        if self.mode_is_read_only() or self.mode_is_append():
-            # Verify that exists
-            for l in self.get_location():
-                name, schema = l.split('.')
-                assert self.table_exist(name, schema=schema), "Table {} does't exists".format(name)
+        # Verify that exists
+        for l in self.get_location():
+            name, schema = l.split('.')
+            exists = self.table_exist(name, schema=schema)
+            if self.mode_is_read_only() or self.mode_is_append() and not exists:
+                raise ValueError("Table {} does't exists".format(name))
+            elif self.mode_is_create() and exists:
+                raise ValueError("Table {} already exists".format(name))
 
 
