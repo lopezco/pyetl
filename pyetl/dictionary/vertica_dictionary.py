@@ -91,3 +91,4 @@ class VerticaDictionary(DatabaseDictionary):
             unsupported_format = md.get_type_in_source()
             unsupported_format = unsupported_format[~format_check].unique()
             raise ValueError('Unsupported Vertica format: {}'.format(unsupported_format))
+        return md

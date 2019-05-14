@@ -7,17 +7,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _date_to_str(date, date_format='%Y-%m-d'):
-    date = date if pd.api.types.is_list_like(date) else [date]
-    if isinstance(date[0], pd.Timestamp):
-        date = date.format(date_format)
-    elif isinstance(date[0], pd.datetime):
-        date = [format(x, date_format) for x in date]
-    elif isinstance(date[0], np.ndarray) and np.issubdtype(date.dtype, np.datetime64):
-        date = np.datetime_as_string(date.astype(np.datetime64))
-    return date
-
-
 class VerticaDataSource(DatabaseDataSource, VerticaConnection):
     """
     Example to create a new class to automatically handle connections:

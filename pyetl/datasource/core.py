@@ -4,9 +4,10 @@ import time
 import pandas as pd
 import numpy as np
 from copy import deepcopy
-from multiprocessing.dummy import Pool as ThreadPool
-from functools import partial
 import logging
+from pyetl.utils.datetime import str_to_date
+from pyetl.utils.string import string_concat
+
 
 logger = logging.getLogger(__name__)
 
@@ -510,5 +511,80 @@ class DatabaseDataSource(DataSource, DbConnection):
         # - for columns, as the row count of the metadata catalog
         sz = sum(row_count), md.size(0)
         return sz
+
+    def fetch_metadata(self, var_name=None):
+        """
+        Fetch metadata for database data sources
+        :param var_name:
+        :return: md
+        """
+        # Fetch metadata for all the tables where data is located
+        tbl_name = self.get_location().get_table_name()
+        md = []
+        for idx in range(len(tbl_name)):
+            md.append(self.get_dictionary().read_metadata(self, tbl_name[idx], var_name))
+        # Check metadata consistency
+        for idx in range(1, len(md)):
+            if md[idx] != md[0]:
+                msg = 'Inconsistent metadata between the following tables: {} and {}'.format(tbl_name[0], tbl_name[idx])
+                logger.error(msg)
+                raise ValueError(msg)
+        # If metadata is consistent, return a single element
+        md = md[0]
+        return md
+
+    def format_datetime_data(self, var_name, var_in):
+        """
+        Convert datetime data to datetime objects using the appropriate formats. For databases, formats are always the
+        same regardless of the database type:
+        - 'yyyy-MM-dd' for dates
+        - 'HH:MM:SS' for times
+        - 'yyyy-MM-dd HH:MM:SS' for timestamps
+        :param var_name:
+        :param var_in:
+        :return: var_out
+        """
+        if var_name not in self.get_variable_names():
+            raise ValueError('Cannot found the following variable in the metadata catalog: {}'.format(var_name))
+        # This function only applies to date, time and timestamp data
+        md = self.get_metadata()
+        check_missing_values = True
+        if md.is_date_variable(var_name):
+            var_out = str_to_date(var_in, input_format='%Y-%m-%d')
+        elif md.is_time_variable(var_name):
+            var_out = str_to_date(var_in, input_format='%H:%M:%S')
+        elif md.is_timestamp_variable(var_name):
+            var_out = str_to_date(var_in, input_format='Y-%m-%d %H:%M:%S')
+        else:
+            var_out = var_in
+            check_missing_values = False
+        # Check the count of missing values
+        if check_missing_values and sum(var_out.isnull()) != sum(var_in == ''):
+            raise ValueError('Error with datetime formatting: mismatch in the number of missing values')
+
+        return var_out
+
+    def generate_select_statement(self, var_name=None):
+        """
+        Generate the SELECT statement for reading data from the data source
+        :param var_name:
+        :return: select_stmt
+        """
+        if not len(self.get_metadata()):
+            raise ValueError('Metadata catalog is missing')
+        # Get variable names if custom variable names have not been provided in input
+        if var_name is None:
+            var_name = self.get_variable_names()
+        # Form the select statement
+        where_clause = np.array(self.get_location().get_where_clause())
+        where_clause[where_clause != ''] = np.core.defchararray.add(' WHERE ', where_clause[where_clause != ''])
+        select_stmt = string_concat('SELECT ', ', '.join(var_name),
+                                    ' FROM ', self.get_location().get_table_name(),
+                                    where_clause)
+        # Display the select statement in debug mode
+        if logger.isEnabledFor(logging.DEBUG):
+            for idx in range(len(select_stmt)):
+                logger.debug('SELECT statement #{}: {}'.format(idx, select_stmt[idx]))
+        return select_stmt
 
 # TODO: finish implementation
