@@ -186,7 +186,7 @@ class DataSource(object):
         """
         :return: number of underlying data location
         """
-        return self.get_location().size()
+        return len(self.get_location())
 
     def requires_connection(self):
         """
