@@ -61,7 +61,7 @@ class DataSource(object):
         # Fetch and set metadata if the data source already exists,
         # i.e. in read-only and append modes only
         if flag_read_metadata and (self.mode_is_read_only() or self.mode_is_append()):
-            self.fetch_metadata()
+            self._md = self.fetch_metadata()
 
         # In append and create modes, there can be only a single output data location
         if (self.mode_is_append() or self.mode_is_create()) and len(self.get_location()) != 1:
@@ -72,6 +72,11 @@ class DataSource(object):
         if self.requires_connection():
             # Init connection
             super(DataSource, self).__init__(**kwargs)
+
+        if self.get_location() is not None and self.get_metadata() is not None:
+            self._shape = self.compute_size()
+
+        self.init_location_iterator()
 
     # # methods (Abstract, Access = public)
     def exists(self):
@@ -216,7 +221,7 @@ class DataSource(object):
         timer = time.time()
 
         # Initialize the reader(s)
-        if self.has_location_iterator():
+        if not self.has_location_iterator():
             self.init_location_iterator()
 
         # Read data
@@ -243,8 +248,10 @@ class DataSource(object):
         ds = deepcopy(self)
         ds._access_mode = 'read-only'
         ds._location_iterator = None
-        ds._md = []
-        ds.fetch_metadata()
+        ds._md = ds.fetch_metadata()
+        ds.init_location_iterator()
+        ds._shape = ds.compute_size()
+        return ds
 
     # # methods (Access = protected)
     def get_dictionary(self):
@@ -300,7 +307,7 @@ class DataSource(object):
         """
         ds = deepcopy(self)
         ds._access_mode = 'read-only'
-        ds._location_iterator = []
+        ds._location_iterator = None
         ds._md = metadata
         ds._shape = size
 
@@ -309,6 +316,7 @@ class DataSource(object):
             ds._location = data_location
         if location_reader is not None:
             ds._location_iterator = location_reader
+        return ds
 
     # Access mode checks
     def mode_is_read_only(self):
@@ -408,7 +416,7 @@ class DatabaseDataSource(DataSource, DbConnection):
         if self.mode_is_read_only() or self.mode_is_append():
             # 'read-only' or 'append' mode
             self._check_table_existence()
-            self.fetch_metadata(variable_names)
+            self._md = self.fetch_metadata(variable_names)
         else:
             # 'create' mode
             # Check number of inputs: metadata are expected here
@@ -424,7 +432,7 @@ class DatabaseDataSource(DataSource, DbConnection):
 
             # Create the tables and read metadata from the database
             self.create_table(metadata)
-            self.fetch_metadata(variable_names)
+            self._md = self.fetch_metadata(variable_names)
 
     def exists(self):
         """

@@ -33,9 +33,6 @@ class FileDataSource(DataSource):
         self._skip_row_count = skip_row_count
         self._chunk_size = chunksize
         self._parameters = kwargs
-        self.get_metadata()
-        self.init_location_iterator()
-        self._shape = self.compute_size()
 
     def num_data_locations(self):
         """NUMDATALOCATIONS For files, there is only a single data"""
@@ -105,7 +102,7 @@ class FileDataSource(DataSource):
 
     def fetch_metadata(self):
         """FETCHMETADATAINTERN Specialized def for fetching metadata"""
-        self._md = self.get_dictionary().read_metadata()
+        return self.get_dictionary().read_metadata()
     
     def technical_preprocessing(self, var, var_name):
         """TECHNICALPREPROCESSING Data source specific preprocessing"""
