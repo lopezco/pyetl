@@ -1,10 +1,11 @@
 import pandas as pd
+from pyetl.utils.iterables import is_listlike
 
 
 def _check_varname(func):
     def wrapper(*args, **kwargs):
         self = args[0]
-        var_name = args[1] if pd.api.types.is_list_like(args[1]) else [args[1]]
+        _, var_name = is_listlike(args[1])
         var_in_md = pd.Index(var_name).isin(self.get_variable_names())
         if not var_in_md.all():
             raise ValueError('Unknown variable(s): {}'.format(pd.Index(var_name)[~var_in_md]))

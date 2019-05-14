@@ -1,5 +1,5 @@
 from pyetl.connections.core import Connection, DbConnection
-from pyetl.datalocation import DatabaseQueryLocation
+from pyetl.datalocation import DatabaseQueryLocation, DatabaseTableLocation
 import time
 import pandas as pd
 import numpy as np
@@ -7,6 +7,7 @@ from copy import deepcopy
 import logging
 from pyetl.utils.datetime import str_to_date
 from pyetl.utils.string import string_concat
+from pyetl.utils.iterables import is_listlike
 
 
 logger = logging.getLogger(__name__)
@@ -241,7 +242,7 @@ class DataSource(object):
         """
         ds = deepcopy(self)
         ds._access_mode = 'read-only'
-        ds._location_iterator = []
+        ds._location_iterator = None
         ds._md = []
         ds.fetch_metadata()
 
@@ -380,7 +381,8 @@ class DatabaseDataSource(DataSource, DbConnection):
         raise NotImplementedError()
 
     # methods (Access = public)
-    def __init__(self, access_mode, location, dictionary, metadata, conn_params=None, credentials=None, **kwargs):
+    def __init__(self, access_mode, location, dictionary, chunksize, metadata, conn_params=None, credentials=None,
+                 **kwargs):
         """
         Construct a database data source object
         The input location might be either a collection of tables or of queries.
@@ -388,14 +390,16 @@ class DatabaseDataSource(DataSource, DbConnection):
 
         :return: self
         """
-        location, variable_names = DatabaseDataSource.process_location(location)
+        location, variable_names = DatabaseDataSource._process_location(location)
 
         # Call super constructor but do not read metadata immediately
         # This will be done later on by this constructor
         super(DatabaseDataSource, self).__init__(credentials=credentials, conn_params=conn_params,
                                                  access_mode=access_mode, is_case_sensitive=False,
                                                  location=location, dictionary=dictionary, var_name=variable_names,
-                                                 flag_read_metadata=False, **kwargs)
+                                                 flag_read_metadata=False)
+        self._parameters = kwargs
+        self._chunk_size = chunksize
         # Do some checks
         # The input location might a collection of queries only in read-only mode
         if isinstance(self._location, DatabaseQueryLocation) and not self.mode_is_read_only():
@@ -403,7 +407,7 @@ class DatabaseDataSource(DataSource, DbConnection):
 
         if self.mode_is_read_only() or self.mode_is_append():
             # 'read-only' or 'append' mode
-            self.check_table_existence()
+            self._check_table_existence()
             self.fetch_metadata(variable_names)
         else:
             # 'create' mode
@@ -427,7 +431,7 @@ class DatabaseDataSource(DataSource, DbConnection):
         Check data source existence
         :return: flag
         """
-        return all(self.check_table_existence())
+        return all(self._check_table_existence())
 
     def get_name(self, idx=None):
         """
@@ -587,4 +591,53 @@ class DatabaseDataSource(DataSource, DbConnection):
                 logger.debug('SELECT statement #{}: {}'.format(idx, select_stmt[idx]))
         return select_stmt
 
-# TODO: finish implementation
+    def _create_location_iterator(self):
+        """
+        Initialize data reader, i.e. database cursor
+        :return: reader
+        """
+        for query in self.generate_select_statement():
+            try:
+                df = self.fetch(query, chunksize=self._chunk_size, **self._parameter)
+            except Exception as e:
+                logger.error('The SELECT statement could not be issued: {}'.format(query))
+                raise e
+            else:
+                yield df
+
+    # methods (Access = private)
+    
+    def _check_table_existence(self):
+        """
+        Check if input tables exist in the database, throw an error otherwise
+        :return: is_existing_tbl
+        """
+        tbl_name = self.get_location().get_table_name()
+        is_existing_tbl = self.get_dictionary().table_exist(self, tbl_name)
+
+        if any(~is_existing_tbl):
+            tbl_name = np.array(tbl_name)
+            raise ValueError('Unknown tables: {}'.format(tbl_name[~is_existing_tbl]))
+        
+        return is_existing_tbl
+
+    @staticmethod
+    def _process_location(location):
+        """
+        Process data source location
+        :param location:
+        :return: location, variable_names
+        """
+        _, location = is_listlike(location)
+        is_compatible_location = [l.upper().startswith('SELECT ') for l in location]
+        if all(is_compatible_location):
+            # Input location is a collection of queries
+            location = DatabaseQueryLocation(location)
+            variable_names = location.get_variable_names()
+        elif ~any(is_compatible_location):
+            # Input location is a collection of database tables
+            location = DatabaseTableLocation(location)
+            variable_names = None
+        else:
+            raise ValueError('Unsupported data location')
+        return location, variable_names

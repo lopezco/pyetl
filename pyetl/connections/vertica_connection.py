@@ -46,7 +46,7 @@ class VerticaConnection(DbConnection):
 
     # Connection specific functions
     @_auto_open_close
-    def fetch(self, query):
+    def fetch(self, query, **kwargs):
         """
         Executes the 'query' and returns the result as a dataframe
 
@@ -54,13 +54,14 @@ class VerticaConnection(DbConnection):
         =======
         query: str
             Query to execute
+        chunksize
 
         Return:
         =======
         out: pandas.DataFrame
             The result table
         """
-        return pd.read_sql(query, self._backend_connection).replace({None: pd.np.nan})
+        return pd.read_sql(query, self._backend_connection, **kwargs).replace({None: pd.np.nan})
 
     @_auto_open_close
     def execute(self, query):

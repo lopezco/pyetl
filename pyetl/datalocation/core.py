@@ -1,4 +1,5 @@
 import pandas as pd
+from pyetl.utils.iterables import is_listlike
 
 
 class DataLocation(object):
@@ -42,4 +43,5 @@ class DataLocation(object):
 
     @staticmethod
     def _get_list_from_input(input):
-        return input if pd.api.types.is_list_like(input) else [input]
+        _, out = is_listlike(input)
+        return out
