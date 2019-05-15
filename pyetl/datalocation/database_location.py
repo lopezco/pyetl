@@ -184,7 +184,7 @@ class DatabaseTableLocation(DatabaseLocation):
         Retrieve table name
         :return: tblName
         """
-        tbl_name = self.__str__()
+        tbl_name = self.to_string()
         return tbl_name
 
     def append_where_clause(self, where_clause):

@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from pyetl.connections.vertica_connection import VerticaConnection
+from pyetl.utils.datetime import date_to_str
+from pyetl.utils.iterables import chunker
 from pyetl.datasource.core import DatabaseDataSource
 import logging
 
@@ -35,35 +37,15 @@ class VerticaDataSource(DatabaseDataSource, VerticaConnection):
 
     ```
     """
+
     def __init__(self, *args, **kwargs):
         """
-        Vertica Table
-
-        Params:
-        =======
-        connection_client: VerticaClient
-            Vertica connection client
-        name: str
-            Table name on Vertica including schema
-        **kwargs:
-            Arguments to configure a client. See `VerticaClient`
-
-        Return:
-        =======
-        out: VerticaTable
-            Vertica Table wrapper
-
+        Vezrtica data source
+        :param connection_client: Vertica connection client
+        :param name: Table name on Vertica including schema
+        :param kwargs:  Arguments to configure a client. See `VerticaClient`
         """
         super(VerticaDataSource, self).__init__(*args, **kwargs)
-
-        # Verify that exists
-        for l in self.get_location():
-            name, schema = l.split('.')
-            exists = self.table_exist(name, schema=schema)
-            if self.mode_is_read_only() or self.mode_is_append() and not exists:
-                raise ValueError("Table {} does't exists".format(name))
-            elif self.mode_is_create() and exists:
-                raise ValueError("Table {} already exists".format(name))
 
     # methods (Access = public)
     def sql_date_formatter(self):
@@ -71,7 +53,7 @@ class VerticaDataSource(DatabaseDataSource, VerticaConnection):
         Date formatter for SQL queries
         :return: fun
         """
-        fun = _date_to_str
+        fun = date_to_str
         return fun
 
     def technical_preprocessing(self, var, var_name=None):
@@ -80,7 +62,7 @@ class VerticaDataSource(DatabaseDataSource, VerticaConnection):
         """
         # Nothing to do
         return var
-        
+
     def create_table(self, metadata):
         """
         Generate the CREATE TABLE statement
@@ -103,7 +85,8 @@ class VerticaDataSource(DatabaseDataSource, VerticaConnection):
         is_text_variable = var_name.isin(metadata.get_text_vars())
         if any(is_text_variable):
             var_name_text_vars = var_name[is_text_variable]
-            vertica_type[is_text_variable] = 'VARCHAR(', + (4 * metadata.get_variable_sizes(var_name_text_vars)).astype(str) + ')'
+            vertica_type[is_text_variable] = 'VARCHAR(', + (4 * metadata.get_variable_sizes(var_name_text_vars)).astype(
+                str) + ')'
 
         # Check that all types have been determined
         is_missing_type = vertica_type == ''
@@ -129,3 +112,61 @@ class VerticaDataSource(DatabaseDataSource, VerticaConnection):
             logger.error('Table creation failed')
             raise e
         return create_table_stmt
+
+    def write(self, tbl, chunksize=None, group_variable=None):
+        """
+        Write input data to data source through the optional connection
+        :return: num_rows_inserted
+        """
+        chunksize = chunksize or self.get_chunk_size()
+        location = self.get_location()
+        if len(location) > 1:
+            # Insert grouping by group_variable or split the table equally in the number of locations
+            if group_variable is not None:
+                # Insert grouping by group_variable
+                if isinstance(group_variable, str) or (
+                        isinstance(group_variable, (tuple, list)) and len(group_variable) < len(tbl)):
+                    # Verify that the grouping variable(s) exist(s) in ALL the locations
+                    if not all([v in self.get_metadata().get_variable_names() for v in group_variable]):
+                        raise ValueError('Grouping variable does not exist in the table')
+                    else:
+                        pass
+                elif len(group_variable) == len(tbl):
+                    # Use the grouping variable as a group index
+                    pass
+                else:
+                    raise ValueError('Wrong group_variable')
+
+                # Create grouped data
+                grouped = tbl.groupby(group_variable)
+
+                if len(grouped) != len(location):
+                    raise ValueError('The number of locations do not match with the number of groups ({} != {}'.format(
+                        len(location), len(grouped)))
+
+                # Insert each group in a location
+                for idx, (_, group) in enumerate(tbl.groupby(group_variable)):
+                    schema, tbl_name = location[idx].split('.')
+                    group.to_sql(name=tbl_name, con=self._backend_connection, chunksize=chunksize, schema=schema,
+                                 if_exists='append', index=True, index_label=None, dtype=None, method='multi')
+            else:
+                # Split rows in locations. /!\ The last table might get less rows
+                for idx, chunk in enumerate(chunker(tbl, len(location))):
+                    schema, tbl_name = location[idx].split('.')
+                    chunk.to_sql(name=tbl_name, con=self._backend_connection, chunksize=chunksize, schema=schema,
+                                 if_exists='append', index=True, index_label=None, dtype=None, method='multi')
+        else:
+            # Insert the entire table in the location
+            schema, tbl_name = location[0].split('.')
+            tbl.to_sql(name=tbl_name, con=self._backend_connection, chunksize=chunksize, schema=schema,
+                       if_exists='append', index=True, index_label=None, dtype=None, method='multi')
+
+    def split(self, num_splits, var_name_split):
+        """
+        Split the data source in multiples child data sources
+        :param num_splits:
+        :param var_name_split:
+        :return: subds
+        """
+        # TODO: Implement split function
+        raise NotImplementedError()

@@ -13,10 +13,6 @@ from pyetl.utils.iterables import is_listlike
 logger = logging.getLogger(__name__)
 
 
-def chunker(seq, size):
-    return (seq[pos:pos + size] for pos in range(0, len(seq), size))
-
-
 class DataSource(object):
     """
     DATASOURCE Abstract data source representation
@@ -372,9 +368,11 @@ class DatabaseDataSource(DataSource, DbConnection):
         """
         raise NotImplementedError()
 
-    def write(self, tbl):
+    def write(self, tbl, chunksize=None):
         """
         Write input data to data source through the optional connection
+        :param tbl:
+        :param chunksize:
         :return: num_rows_inserted
         """
         raise NotImplementedError()
