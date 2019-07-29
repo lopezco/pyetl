@@ -1,6 +1,7 @@
 import subprocess
 import os
 import logging
+import subprocess as sp
 
 logger = logging.getLogger(__name__)
 
@@ -28,3 +29,21 @@ def handle_cmd_output(output):
         raise Exception(output['errors'])
     else:
         print(output['output'])
+
+
+def execute_piped_commands(cmd):
+    """
+    Helper function for running piped Linux commands easily
+    :param cmd:
+    :return:
+    """
+    procs = []
+    for n in range(len(cmd)):
+        subprocess_cmd = cmd[n].split(" ")
+        if n == 0:
+            procs.append(sp.Popen(subprocess_cmd, stdout=sp.PIPE))
+        elif n == len(cmd)-1:
+            out = sp.check_output(subprocess_cmd, stdin=procs[-1].stdout)
+        else:
+            procs.append(sp.Popen(subprocess_cmd, stdin=procs[-1].stdout, stdout=sp.PIPE))
+    return out
